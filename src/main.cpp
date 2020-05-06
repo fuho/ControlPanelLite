@@ -9,7 +9,10 @@
 #include <avr/pgmspace.h>
 #include <avdweb_VirtualDelay.h>
 #include <ToneSfx.h>
+#include <DotMatrixAnimation.h>
 #include <animations.h>
+#include <sounds.h>
+#include <avr/wdt.h>
 
 /*
 Control Panel Lite by MileStorm
@@ -28,9 +31,14 @@ uses code for Simon says game from SparkFun Inventor's Kit: Example sketch 16
 #define NUMITEMS(arg) ((unsigned int) (sizeof (arg) / sizeof (arg [0])))
 
 MaxMatrix dot_matrix(DOTMATRIX_DIN, DOTMATRIX_CS, DOTMATRIX_CLK, DOTMATRIX_DISPLAY_COUNT);
+DotMatrixAnimation matrixAnimation(dot_matrix);
+
+ToneSfx toneSfx(BUZZER);
+//TODO: udelat v sfx knihovnne prehravac pres seriovej port
 
 OneButton myButtons[] = {OneButton(BUTTON_RED, true), OneButton(BUTTON_GREEN, true), OneButton(BUTTON_BLUE, true), OneButton(BUTTON_YELLOW, true)};
 Flasher myLeds[] = {Flasher(LED_RED, 300, 300), Flasher(LED_GREEN, 300, 300), Flasher(LED_BLUE, 300, 300), Flasher(LED_YELLOW, 300, 300)};
+
 
 bool doSound = false;
 
@@ -68,8 +76,16 @@ char start_message_timedbuttons[] =    " Timed Buttons   ";
 char start_message_simon[] =    " Simon says   ";
 char start_message_soundboard[] =    " Soundboard   ";
 
+char message_bank0[] = " Retro sounds   ";
+char message_bank1[] = " Wolf 3D sounds   ";
+char message_bank2[] = " Melody tones   ";
+char message_bank3[] = " -not ready yet-   ";
+
 // gameType: menu -1, easybutton 0, simon 1, soundboard 2,  timedbutton 3
 int gameType = -1;
+
+// ID of soundbank selected by longpress of buttons in soundbank
+int soundboardBank = 0;
 
 // ----------------------------------------------------------------
 // misc functions
@@ -116,118 +132,6 @@ void printStringWithShift(char* s, int shift_speed){
     s++;
   }
 }
-
-// non blocking animation class
-class DotMatrixAnimation {
-  bool isAnimating = false;
-
-  const uint64_t *animArray;
-  int animLength;
-  int cyclesCount;
-  int frameDelay;
-
-  bool isInfinite = false;
-
-  // counter helpers
-  int cyclesIndex = 0;
-  int animIndex = 0;
-
-  VirtualDelay animDelay; // initialize virtual delay
-
-  private:
-  void displayImage(uint64_t image) {
-    for (int i = 0; i < 8; i++) {
-      byte row = (image >> i * 8) & 0xFF;
-      for (int j = 0; j < 8; j++) {
-        dot_matrix.setDot(j, i, bitRead(row, j));
-      }
-    }
-  }
-
-  public:
-  DotMatrixAnimation(const uint64_t *_animArray, int _animLength, int _frameDelay = 100){
-    animArray = _animArray;
-    animLength = _animLength;
-    frameDelay = _frameDelay;
-  }
-
-  bool isRunning() {
-    return isAnimating;
-  }
-
-  void setInfinite(bool value = true) {
-    isInfinite = value;
-  }
-
-  void start(int _cyclesCount = 1) {
-    cyclesCount = _cyclesCount;
-    cyclesIndex = 0;
-    isAnimating = true;
-  }
-
-  void stop() {
-    isAnimating = false;
-  }
-
-  void tick() {
-    if (isAnimating == true) {
-      animDelay.start(frameDelay);
-      if (animDelay.elapsed()) {
-
-        uint64_t image;
-
-        memcpy_P(&image, &animArray[this->animIndex], 8);
-        displayImage(image);
-
-        if (animIndex < animLength - 1) {
-          animIndex++;
-        } else {
-          if (isInfinite) {
-            animIndex = 0;
-          } else {
-            if (cyclesIndex == cyclesCount - 1) {
-              isAnimating = false;
-              dot_matrix.clear();
-            }
-            animIndex = 0;
-            cyclesIndex++;
-          }
-
-        }
-
-      }
-    }
-  }
-
-
-
-};
-
-DotMatrixAnimation animation_intro(ANIM_fx2, ANIM_fx2_len);
-DotMatrixAnimation animation_gun(ANIM_gun, ANIM_gun_len, 30);
-
-
-const char *sfxComputerSoundCmd[] = {"N:10,2000,50,120,1000", SFX_END};
-
-const char *sfxBombCmd[] = {"S:2200,1000,25,50", "N:100,200,5,15,1500", SFX_END};
-const char *sfxSirenCmd[] = {"S:880,1650,50,10", "S:1650,880,50,10", SFX_REPEAT};
-const char *sfxGunCmd[] = {"N:100,200,5,15,200", "S:2200,900,50,12", SFX_END};
-// wolf3d sound, lol
-const char *sfxBlastCmd[] = {"N:400,500,5,15,50", "N:300,400,5,15,75", "N:200,300,5,15,100", "N:100,200,5,15,125", SFX_END};
-
-const char *sfxWolfAmmoCmd[] = {"T:587,170", "P:30", "T:988,50", "P:30", "T:988,50", "P:30", "T:988,50", SFX_END};
-const char *sfxWolfOneUpCmd[] = {"T:1047,50", "P:50", "T:1245,50", "P:50", "T:1480,50", "P:50", "S:2093,131,100,20", SFX_END};
-const char *sfxWolfGobletPickupCmd[] = {"S:294,440,10,5", "S:440,294,10,5", "S:440,554,10,5", "S:554,440,10,5", "S:554,831,10,5", "T:831,80", "P:140", "T:1047,45", "P:20", "T:1047,60", "P:20", "T:1047,45", "P:35", "T:1245,80", "P:20", "T:1245,60", SFX_END};
-const char *sfxWolfGunshot[] = {"T:784,7", "T:523,22", "P:7", "T:587,29", "P:7", "T:523,29", "T:123,15", "S:392,294,80,10", "T:123,100", "P:14", "T:123,7", "P:20", "T:123,7", "P:14", "T:123,14", "P:40", "T:123,35", "P:40", "T:123,7", SFX_END};
-
-const char *melodyStart[] = {"I:523,659,15,200", "I:659,784,15,200", "P:100", "I:698,1047,15,100", "P:50", "I:784,988,15,100", "P:50","I:784,1047,15,100", SFX_END};
-
-
-const char *testCmd[] = {"N:10,2000,50,120,1000", SFX_REPEAT};
-
-
-
-ToneSfx toneSfx(BUZZER);
 
 
 // --------------------------------------------------------------------------------
@@ -570,11 +474,182 @@ void attractMode(void)
 
 // button handler
 
+void processLongPress(int buttonId) {
+  switch (gameType) {
+  case -1:
+    // main menu
+    switch (buttonId) {
+    case 0:
+      // RED button
+
+      break;
+
+    case 1:
+      // GREEN button
+
+      break;
+
+    case 2:
+      // BLUE button
+
+      break;
+
+    case 3:
+      // YELLOW button
+
+      break;
+
+    default:
+      break;
+    }
+
+    break;
+
+  case 0:
+    // easy buttons game
+    switch (buttonId) {
+    case 0:
+      // RED button
+
+      break;
+
+    case 1:
+      // GREEN button
+
+      break;
+
+    case 2:
+      // BLUE button
+
+      break;
+
+    case 3:
+      // YELLOW button
+
+      break;
+
+    default:
+      break;
+    }
+
+    break;
+
+  case 1:
+    // simon
+    switch (buttonId) {
+    case 0:
+      // RED button
+
+      break;
+
+    case 1:
+      // GREEN button
+
+      break;
+
+    case 2:
+      // BLUE button
+
+      break;
+
+    case 3:
+      // YELLOW button
+
+      break;
+
+    default:
+      break;
+    }
+
+    break;
+
+  case 2:
+    // sound board
+    switch (buttonId) {
+    case 0:
+      // RED button
+      soundboardBank = 0;
+      matrixAnimation.stop();
+      turnOffAllLeds();
+      printStringWithShift(message_bank0, text_speed);
+
+      break;
+
+    case 1:
+      // GREEN button
+      soundboardBank = 1;
+      matrixAnimation.stop();
+      turnOffAllLeds();
+      printStringWithShift(message_bank1, text_speed);
+
+      break;
+
+    case 2:
+      // BLUE button
+      soundboardBank = 2;
+      matrixAnimation.stop();
+      turnOffAllLeds();
+      printStringWithShift(message_bank2, text_speed);
+
+      break;
+
+    case 3:
+      // YELLOW button
+      soundboardBank = 3;
+      matrixAnimation.stop();
+      turnOffAllLeds();
+      printStringWithShift(message_bank3, text_speed);
+
+      break;
+
+    default:
+      break;
+    }
+
+    break;
+
+  case 3:
+    // timed buttons game
+    switch (buttonId) {
+    case 0:
+      // RED button
+
+      break;
+
+    case 1:
+      // GREEN button
+
+      break;
+
+    case 2:
+      // BLUE button
+
+      break;
+
+    case 3:
+      // YELLOW button
+
+      break;
+
+    default:
+      break;
+    }
+
+    break;
+
+  default:
+    break;
+  }
+}
+
+// handler for button click
 void processPush(int buttonId) {
-  Serial.print("ButtonID: ");
-  Serial.println(buttonId);
-  Serial.print("GameType: ");
-  Serial.println(gameType);
+  if (DEBUG) {
+    Serial.print("ButtonID click: ");
+    Serial.println(buttonId);
+    Serial.print("GameType: ");
+    Serial.println(gameType);
+  }
 
   switch (gameType){
   case -1:
@@ -585,7 +660,7 @@ void processPush(int buttonId) {
     switch (buttonId){
     case 0:
       // easy buttons game
-      animation_intro.stop();
+      matrixAnimation.stop();
       turnOffAllLeds();
       printStringWithShift(start_message_easybuttons, text_speed);
       writeScore(buttonGameScore, false);
@@ -594,21 +669,21 @@ void processPush(int buttonId) {
 
     case 1:
       // simon
-      animation_intro.stop();
+      matrixAnimation.stop();
       turnOffAllLeds();
       play_intro();
       break;
 
     case 2:
       // sound board
-      animation_intro.stop();
+      matrixAnimation.stop();
       turnOffAllLeds();
       printStringWithShift(start_message_soundboard, text_speed);
       break;
 
     case 3:
       // timed buttons game
-      animation_intro.stop();
+      matrixAnimation.stop();
       turnOffAllLeds();
       printStringWithShift(start_message_timedbuttons, text_speed);
       break;
@@ -649,19 +724,87 @@ void processPush(int buttonId) {
 
   case 2:
     // sound board
-    if (buttonId == 0) {
-      toneSfx.play(sfxSirenCmd);
+    switch (soundboardBank) {
+    case 0:
+      // Retro sounds
+      switch (buttonId) {
+      case 0:
+        matrixAnimation.play(ANIM_beacon, ANIM_beacon_len, 1, true, 50);
+        toneSfx.play(sfxSirenCmd);
+        break;
+      case 1:
+        matrixAnimation.play(ANIM_laser, ANIM_laser_len, 1, false, 50);
+        toneSfx.play(sfxGunCmd);
+        break;
+      case 2:
+        matrixAnimation.play(ANIM_bomb, ANIM_bomb_len, 1, false, 200);
+        toneSfx.play(sfxBombCmd);
+        break;
+      case 3:
+        matrixAnimation.play(ANIM_random, ANIM_random_len, 1, true, 30);
+        toneSfx.play(testCmd);
+        break;
+      default:
+        break;
+      }
+      break;
+
+    case 1:
+      // Wolf 3D sounds
+      switch (buttonId) {
+      case 0:
+        matrixAnimation.stillFrame(STILL_wolf_icons, 750, 0);
+        toneSfx.play(sfxWolfGunshot);
+        break;
+      case 1:
+        matrixAnimation.stillFrame(STILL_wolf_icons, 1100, 1);
+        toneSfx.play(sfxWolfOneUpCmd);
+        break;
+      case 2:
+        matrixAnimation.stillFrame(STILL_wolf_icons, 750, 2);
+        toneSfx.play(sfxWolfAmmoCmd);
+        break;
+      case 3:
+        matrixAnimation.stillFrame(STILL_wolf_icons, 1400, 3);
+        toneSfx.play(sfxWolfGobletPickupCmd);
+        break;
+      default:
+        break;
+      }
+      break;
+
+    case 2:
+      // melody
+      switch (buttonId) {
+      case 0:
+        matrixAnimation.play(ANIM_notes, ANIM_notes_len, 1, false, 50);
+        toneSfx.play(toneAC);
+        break;
+      case 1:
+        matrixAnimation.play(ANIM_notes, ANIM_notes_len, 1, false, 50);
+        toneSfx.play(toneBD);
+        break;
+      case 2:
+        matrixAnimation.play(ANIM_notes, ANIM_notes_len, 1, false, 50);
+        toneSfx.play(toneCE);
+        break;
+      case 3:
+        matrixAnimation.play(ANIM_notes, ANIM_notes_len, 1, false, 50);
+        toneSfx.play(toneEG);
+        break;
+      default:
+        break;
+      }
+      break;
+
+    case 3:
+      /* code */
+      break;
+
+    default:
+      break;
     }
-    if (buttonId == 1) {
-      animation_gun.start();
-      toneSfx.play(sfxGunCmd);
-    }
-    if (buttonId == 2) {
-      toneSfx.play(sfxBombCmd);
-    }
-    if (buttonId == 3) {
-      toneSfx.play(testCmd);
-    }
+
     break;
 
   case 3:
@@ -701,35 +844,77 @@ void butt3Click() {
 	processPush(3);
 }
 
+// RED
+void butt0LongPress() {
+	processLongPress(0);
+}
+
+// GREEN
+void butt1LongPress() {
+	processLongPress(1);
+}
+
+// BLUE
+void butt2LongPress() {
+	processLongPress(2);
+}
+
+// YELLOW
+void butt3LongPress() {
+	processLongPress(3);
+}
+
+// ---------------------------------------------
+// ------- Intro callback fn -------------------
+
+void introAnim1() {
+  matrixAnimation.play(ANIM_fx2, ANIM_fx2_len, 1, true);
+}
+
+void introAnim() {
+  toneSfx.play(melodyStart);
+  matrixAnimation.stillFrame(ANIM_ms_logo, 1500, 6, introAnim1);
+}
+
+// -----------------------------------------
+
+// reset arduino
+[[noreturn]] void reset() {
+  wdt_enable(WDTO_15MS);
+  for (;;){}
+}
+
 // -----------------------------------------
 // SETUP
 // ------------------------------------------
 void setup() {
+  MCUSR = 0;
+
   Serial.begin(9600);
-  Serial.println("Starting...");
+  if (DEBUG) {
+    Serial.println("ControlPanelLite is booting up...");
+  }
 
   pinMode(BUZZER, OUTPUT);
 
   dot_matrix.init(); // module initialize
   dot_matrix.setIntensity(3); // dot matix intensity 0-15
-  // bootup
-  turnOnAllLeds();
 
-  animation_intro.setInfinite();
-  animation_intro.start();
-  //tone(BUZZER, NOTE_E5, 100);
-  //delay(100);
-  //tone(BUZZER, NOTE_E6, 400);
+  // bootup
+  matrixAnimation.play(ANIM_ms_logo, ANIM_ms_logo_len, 1, false, 100, introAnim);
+
+
   flashAllLeds();
 
-	for (int i = 0; i < 4; i++){
-		myButtons[i].setPressTicks(60);
-	}
+	myButtons[0].attachClick(butt0Click);
+	myButtons[1].attachClick(butt1Click);
+	myButtons[2].attachClick(butt2Click);
+	myButtons[3].attachClick(butt3Click);
 
-	myButtons[0].attachPress(butt0Click);
-	myButtons[1].attachPress(butt1Click);
-	myButtons[2].attachPress(butt2Click);
-	myButtons[3].attachPress(butt3Click);
+	myButtons[0].attachLongPressStart(butt0LongPress);
+	myButtons[1].attachLongPressStart(butt1LongPress);
+	myButtons[2].attachLongPressStart(butt2LongPress);
+	myButtons[3].attachLongPressStart(butt3LongPress);
 
   pinMode(BUTTON_RED, INPUT_PULLUP);
   pinMode(BUTTON_GREEN, INPUT_PULLUP);
@@ -747,6 +932,12 @@ void setup() {
 // --------------------------------------
 
 void loop() {
+  // if all four buttons are pressed at once, machine will restart
+  // TODO: does not work in Simon game
+  if (!digitalRead(BUTTON_RED) && !digitalRead(BUTTON_GREEN) && !digitalRead(BUTTON_BLUE) && !digitalRead(BUTTON_YELLOW)){
+    reset();
+  }
+
   switch (gameType){
   case 1:
     // loop for simon
@@ -782,16 +973,8 @@ void loop() {
       myLeds[i].tick();
     }
 
-    animation_gun.tick();
-    animation_intro.tick();
+    matrixAnimation.tick();
     toneSfx.tick();
     break;
   }
 }
-
-// TODO:
-/*
-u soundboardu udelat naky animace s virtualdelay
-array framu, ktery se zobrazej spolu se zvukem, kterej bude taky pres virtual delay
-efektu a animaci by bylo 8, protoze press a longpress
-*/
