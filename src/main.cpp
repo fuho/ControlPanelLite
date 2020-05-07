@@ -765,7 +765,7 @@ void processPush(int buttonId) {
         toneSfx.play(sfxWolfAmmoCmd);
         break;
       case 3:
-        matrixAnimation.stillFrame(STILL_wolf_icons, 1400, 3);
+        matrixAnimation.play(ANIME_wolf3d_goblet, ANIM_wolf3d_goblet_len, 1, false, 50);
         toneSfx.play(sfxWolfGobletPickupCmd);
         break;
       default:
