@@ -1,0 +1,17 @@
+"name": "MMButton",
+"keywords": "button, debounce, hid, event, press, long press, long-press, double press, double-press",
+"description": "This is an Arduino Library for advanced button usage",
+"authors":
+{
+"name": "Ondrej Dolejsi",
+"email": "ondrej.dolejsi@gmail.com",
+"url": "https://code.google.com/u/andrew.rapp@gmail.com/"
+},
+"repository":
+{
+"type": "git",
+"url": "https://github.com/fuho/mmbutton"
+},
+"frameworks": "arduino",
+"platforms": "atmelavr"
+}
