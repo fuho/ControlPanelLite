@@ -1,7 +1,7 @@
 /*
 MMButton library
 ===============
-version 0.0.1 (May 2020)
+version 1.0.0 (May 2020)
 copyright (c) 2020 fuho
 https://github.com/fuho
 
@@ -12,9 +12,6 @@ version. This program is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License at
 http://www.gnu.org/licenses .
-
-This library uses VirtualDelay library
-from http://www.avdweb.nl/arduino/libraries/virtualdelay.html
 */
 
 #include "MMButton.h"
@@ -132,6 +129,13 @@ void MMButton::_update() {
           _continueCount++;
           _emitEvent(MMButtonEvent(MMButtonEventType::CONTINUE, _pin, ms, us, duration, _continueCount));
         }
+        if (ms > _lastDownLong + _cancelPressMinMs && _lastPressCancelled < _lastDownLong){
+          // if button down long enough to cancel, but also this is the first time it happened this LONG_DOWN
+          _lastPressCancelled = ms;
+          _lastPressCancelledMicros = us;
+          _pressCancelledCount++;
+          _emitEvent(MMButtonEvent(MMButtonEventType::PRESS_CANCELLED, _pin, ms, us, duration, _pressCancelledCount));
+        }
       }
       break;
     case MMButtonState::DOWN_UP:
@@ -163,27 +167,33 @@ void MMButton::_update() {
         // UP
         _emitEvent(MMButtonEvent(MMButtonEventType::UP, _pin, ms, us, 0, _upCount));
 
-        // PRESS
-        _lastPress = ms;
-        _lastPressMicros = us;
-        _pressCount++;
-        _emitEvent(MMButtonEvent(MMButtonEventType::PRESS, _pin, ms, us, duration, _pressCount));
+        // PRESS ?
+        if (_lastPressCancelled > _lastDown) {
+          // PRESS_CANCELLED don't emit PRESS* events
+        } else {
+          // PRESS
+          _lastPress = ms;
+          _lastPressMicros = us;
+          _pressCount++;
+          _emitEvent(MMButtonEvent(MMButtonEventType::PRESS, _pin, ms, us, duration, _pressCount));
 
-        // PRESS_LONG
-        if (duration > _longDownMs) {
-          // If last press was long press
-          _lastPressLong = ms;
-          _lastPressLongMicros = us;
-          _pressLongCount++;
-          _emitEvent(MMButtonEvent(MMButtonEventType::PRESS_LONG, _pin, ms, us, duration, _pressLongCount));
-        }
+          // PRESS_LONG
+          if (duration > _longDownMs) {
+            // If last press was long press
+            _lastPressLong = ms;
+            _lastPressLongMicros = us;
+            _pressLongCount++;
+            _emitEvent(MMButtonEvent(MMButtonEventType::PRESS_LONG, _pin, ms, us, duration, _pressLongCount));
+          }
 
-        //PRESS_DOUBLE
-        if (isPressDouble) {
-          _pressDoubleCount++;
-          _emitEvent(
-              MMButtonEvent(MMButtonEventType::PRESS_DOUBLE, _pin, ms, us, pressDoubleDuration, _pressDoubleCount)
-          );
+          //PRESS_DOUBLE
+          if (isPressDouble) {
+            _pressDoubleCount++;
+            _emitEvent(
+                MMButtonEvent(MMButtonEventType::PRESS_DOUBLE, _pin, ms, us, pressDoubleDuration, _pressDoubleCount)
+            );
+          }
+
         }
         break;
       }

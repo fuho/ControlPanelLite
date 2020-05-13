@@ -1,7 +1,7 @@
 /*
 MMButton library
 ===============
-version 0.0.1 (May 2020)
+version 1.0.0 (May 2020)
 copyright (c) 2020 fuho
 https://github.com/fuho
 
@@ -12,9 +12,6 @@ version. This program is distributed in the hope that it will be useful, but
 WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
 FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License at
 http://www.gnu.org/licenses .
-
-This library uses VirtualDelay library
-from http://www.avdweb.nl/arduino/libraries/virtualdelay.html
 */
 
 #pragma clang diagnostic push
