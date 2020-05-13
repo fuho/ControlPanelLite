@@ -64,10 +64,10 @@ void MMButton::_emitEvent(MMButtonEvent event) {
   }
 }
 
-unsigned long ms;
-unsigned long us;
 
 void MMButton::_update() {
+  unsigned long ms;
+  unsigned long us;
   ms = millis();
   us = micros();
   _lastCheckMs = ms;
@@ -125,8 +125,8 @@ void MMButton::_update() {
           // Button down long enough for CONTINUE
           _lastContinue = ms;
           _lastContinueMicros = us;
-          duration = ms - _lastContinue;
           _continueCount++;
+          duration = ms - _lastDownLong;
           _emitEvent(MMButtonEvent(MMButtonEventType::CONTINUE, _pin, ms, us, duration, _continueCount));
         }
         if (ms > _lastDownLong + _cancelPressMinMs && _lastPressCancelled < _lastDownLong){
@@ -134,6 +134,7 @@ void MMButton::_update() {
           _lastPressCancelled = ms;
           _lastPressCancelledMicros = us;
           _pressCancelledCount++;
+          duration = ms - _lastDown;
           _emitEvent(MMButtonEvent(MMButtonEventType::PRESS_CANCELLED, _pin, ms, us, duration, _pressCancelledCount));
         }
       }
