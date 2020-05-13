@@ -46,10 +46,6 @@ MMButton::MMButton(
     _doublePressMaxMs(doublePressMaxMs),
     _cancelPressMinMs(cancelPressMinMs) {}
 
-void log(const String &text) {
-  //Serial.print(millis());
-  //Serial.println(" " + text);
-}
 
 void MMButton::tick() {
   if (_shouldUpdate()) {
@@ -71,23 +67,28 @@ void MMButton::_emitEvent(MMButtonEvent event) {
   }
 }
 
+unsigned long ms;
+unsigned long us;
+
 void MMButton::_update() {
-  //TODO: Implement; state
+  ms = millis();
+  us = micros();
+  _lastCheckMs = ms;
+  _lastCheckMicros = us;
   MMButtonState raw = getRawState();
-  _lastCheckMs = millis();
+
+  unsigned long duration;
   switch (_buttonState) {
     case MMButtonState::UP:
-      log("...UP");
       if (raw == MMButtonState::UP) {
         // Button stays UP, do nothing
-        return;
       } else if (raw == MMButtonState::DOWN) {
         _buttonState = MMButtonState::UP_DOWN;
-        return;
+        _lastUpDownMs = ms;
+        _lastUpDownMicros = us;
       }
       break;
     case MMButtonState::UP_DOWN:
-      log("...UP_DOWN");
       if (raw == MMButtonState::UP) {
         // Cancelling transition from  UP to DOWN
         _buttonState = MMButtonState::UP;
@@ -95,113 +96,105 @@ void MMButton::_update() {
         // Button successfully flipped from UP to DOWN
         _buttonState = MMButtonState::DOWN;
         _downCount++;
-        _lastDown = millis();
-        _lastDownMicros = micros();
-        _emitEvent(MMButtonEvent(MMButtonEventType::DOWN, _lastDown, _lastDownMicros, 0, _downCount));
-        return;
+        _lastDown = ms;
+        _lastDownMicros = us;
+        _emitEvent(MMButtonEvent(MMButtonEventType::DOWN, _pin, ms, us, 0, _downCount));
       }
       break;
     case MMButtonState::DOWN:
-      log("...DOWN");
       if (raw == MMButtonState::UP) {
         // Entering transition from DOWN to UP
         _buttonState = MMButtonState::DOWN_UP;
       } else {
         // Button stays DOWN check how long has it been and act accordingly
-        if (millis() - _lastDown > _longDownMs) {
+        if (ms - _lastDown > _longDownMs) {
           _buttonState = MMButtonState::DOWN_LONG;
+          _downLongCount++;
           _continueCount = 0;
-          _lastDownLong = millis();
-          _lastDownLongMicros = micros();
-          _emitEvent(
-              MMButtonEvent(MMButtonEventType::DOWN_LONG, _lastDownLong, _lastDownLongMicros, _lastDown - _lastDownLong,
-                            _downLongCount));
+          _lastDownLong = ms;
+          _lastDownLongMicros = us;
+          duration = _lastDownLong - _lastDown;
+          _emitEvent(MMButtonEvent(MMButtonEventType::DOWN_LONG, _pin, ms, us, duration, _downLongCount));
         }
-        return;
       }
       break;
     case MMButtonState::DOWN_LONG:
-      log("...DOWN_LONG");
       if (raw == MMButtonState::UP) {
         // Entering transition from DOWN_LONG to UP
         _buttonState = MMButtonState::DOWN_UP;
       } else {
         // Button stays DOWN check how long has it been and act accordingly
-        if (_lastDownLong + _continueRateMs * (1 + _continueCount) <= millis()) {
-          // do nothing
-        } else {
-          unsigned long duration1;
-          if (_continueCount) {
-            duration1 = _lastDownLong;
-          } else {
-            duration1 = _lastContinue;
-          }
-          _lastContinue = millis();
-          _lastContinueMicros = micros();
+        if (ms > (_lastDownLong + (_continueRateMs * (1 + _continueCount)))) {
+          // Button down long enough for CONTINUE
+          _lastContinue = ms;
+          _lastContinueMicros = us;
+          duration = ms - _lastContinue;
           _continueCount++;
-          _emitEvent(
-              MMButtonEvent(MMButtonEventType::CONTINUE, _lastContinue, _lastContinueMicros, duration1, _continueCount)
-          );
-
+          _emitEvent(MMButtonEvent(MMButtonEventType::CONTINUE, _pin, ms, us, duration, _continueCount));
         }
-        return;
       }
       break;
     case MMButtonState::DOWN_UP:
-      log("...DOWN_UP");
       if (raw == MMButtonState::DOWN) {
         // Cancelling transition from  DOWN to UP
         _buttonState = MMButtonState::DOWN;
+        break;
       } else {
         // Button successfully flipped from DOWN to UP
         _buttonState = MMButtonState::UP;
+
+        _lastUp = ms;
+        _lastUpMicros = us;
         _upCount++;
-        _lastUp = millis();
-        _lastUpMicros = micros();
-        bool isLongPress = false;
-        bool isDoublePress = false;
-        unsigned long duration = _lastUp - _lastDown;
+        _continueCount = 0;
+        duration = ms - _lastDown;
+
+
+        // Check if it's double press (doing it here before _lastPress overwritten as it's necessary to calculate...
+        // ... pressDoubleDuration, but the event has to go out after UP, PRESS and PRESS_LONG
+        bool isPressDouble = ms < _lastPress + _doublePressMaxMs;
+        unsigned long pressDoubleDuration = 0;
+        if (isPressDouble) {
+          _lastPressDouble = ms;
+          _lastPressDoubleMicros = us;
+          pressDoubleDuration = ms - _lastPress;
+        }
+
+        // UP
+        _emitEvent(MMButtonEvent(MMButtonEventType::UP, _pin, ms, us, 0, _upCount));
+
+        // PRESS
+        _lastPress = ms;
+        _lastPressMicros = us;
+        _pressCount++;
+        _emitEvent(MMButtonEvent(MMButtonEventType::PRESS, _pin, ms, us, duration, _pressCount));
+
+        // PRESS_LONG
         if (duration > _longDownMs) {
           // If last press was long press
-          isLongPress = true;
+          _lastPressLong = ms;
+          _lastPressLongMicros = us;
           _pressLongCount++;
-          _lastPressLong = _lastUp;
-          _lastPressLongMicros = _lastUpMicros;
+          _emitEvent(MMButtonEvent(MMButtonEventType::PRESS_LONG, _pin, ms, us, duration, _pressLongCount));
         }
-        if (_lastUp - _lastPress > _doublePressMaxMs) {
-          isDoublePress = true;
+
+        //PRESS_DOUBLE
+        if (isPressDouble) {
           _pressDoubleCount++;
-          _lastPressDouble = _lastUp;
-          _lastPressDoubleMicros = _lastUpMicros;
-        }
-        _lastPress = _lastUp;
-        _upCount++;
-        _emitEvent(MMButtonEvent(MMButtonEventType::UP, _lastUp, _lastUpMicros, 0, _upCount));
-        _pressCount++;
-        _emitEvent(MMButtonEvent(MMButtonEventType::PRESS, _lastUp, _lastUpMicros, duration, _pressCount));
-        if (isLongPress) {
           _emitEvent(
-              MMButtonEvent(MMButtonEventType::PRESS_LONG, _lastUp, _lastUpMicros, duration, _pressLongCount)
+              MMButtonEvent(MMButtonEventType::PRESS_DOUBLE, _pin, ms, us, pressDoubleDuration, _pressDoubleCount)
           );
         }
-        if (isDoublePress) {
-          _emitEvent(
-              MMButtonEvent(MMButtonEventType::PRESS_DOUBLE, _lastUp, _lastUpMicros, duration, _pressDoubleCount)
-          );
-        }
+        break;
       }
-      return;
-      break;
   }
 }
 
 
 MMButtonState MMButton::getRawState() const {
   if (digitalRead(_pin)) {
-    log("raw: UP");
     return MMButtonState::UP;
   } else {
-    log("raw: DOWN");
     return MMButtonState::DOWN;
   }
 }
@@ -276,18 +269,10 @@ void MMButton::removeEventListener() {
 }
 
 
-// MMButton Event
-MMButtonEvent::MMButtonEvent(
-    MMButtonEventType type,
-    unsigned long millis,
-    unsigned long micros,
-    unsigned long duration,
-    unsigned long count
-) :
-    type(type),
-    millis(millis),
-    micros(micros),
-    duration(duration),
-    count(count) {}
-
 #pragma clang diagnostic pop
+
+//char logMsg[128];
+//sprintf(logMsg, "_lastPress:%lu, _doublePressMaxMs:%lu, ms:%lu", _lastPress, _doublePressMaxMs, ms);
+//Serial.println(logMsg);
+
+

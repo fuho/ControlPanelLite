@@ -28,36 +28,15 @@ from http://www.avdweb.nl/arduino/libraries/virtualdelay.html
 
 #include <Arduino.h>
 #include "../lib/VirtualDelay/avdweb_VirtualDelay.h"
+#include "MMButtonEvent.h"
 
 #define SFX_END "END"
 #define SFX_REPEAT "REP"
-
-enum class MMButtonEventType {
-    DOWN, DOWN_LONG, CONTINUE, UP, PRESS, PRESS_LONG, PRESS_DOUBLE, PRESS_CANCELLED
-};
 
 enum class MMButtonState {
     UP, UP_DOWN, DOWN, DOWN_LONG, DOWN_UP
 };
 
-
-class MMButtonEvent {
-public:
-    MMButtonEventType type;
-    unsigned long millis;
-    unsigned long micros;
-    unsigned long duration;
-    unsigned long count;
-
-    explicit MMButtonEvent(
-        MMButtonEventType type,
-        unsigned long _millis,
-        unsigned long _micros,
-        unsigned long _duration,
-        unsigned long _count
-    );
-
-};
 
 extern "C" {
 typedef void (*ListenerType)(MMButtonEvent);
@@ -65,7 +44,6 @@ typedef void (*ListenerType)(MMButtonEvent);
 
 class MMButton {
 public:
-    void tick();
 
     explicit MMButton(int pin, ListenerType listener);
 
@@ -78,6 +56,8 @@ public:
         unsigned long doublePressMaxMs,
         unsigned long cancelPressMinMs
     );
+
+    void tick();
 
 
     /**
@@ -141,15 +121,30 @@ public:
 
     void removeEventListener();
 
+    MMButtonState getRawState() const;
+
 
 private:
     int _pin;
-    unsigned long _lastCheckMs = millis();
-    unsigned long _debounceMs = 5;
-    unsigned long _longDownMs = 500;
-    unsigned long _continueRateMs = 250;
-    unsigned long _doublePressMaxMs = 500;
+
+    MMButtonState _buttonState;
+    ListenerType _listener;
+
+    unsigned long _debounceMs = 2;
+    unsigned long _longDownMs = 300;
+    unsigned long _continueRateMs = 200;
+    unsigned long _doublePressMaxMs = 600;
     unsigned long _cancelPressMinMs = 10000;
+
+    unsigned long _lastCheckMs = 0;
+    unsigned long _lastCheckMicros = 0;
+
+    unsigned long _lastUp = 0;
+    unsigned long _lastUpMicros = 0;
+    unsigned long _upCount = 0;
+
+    unsigned long _lastUpDownMs = 0;
+    unsigned long _lastUpDownMicros = 0;
 
     unsigned long _lastDown = 0;
     unsigned long _lastDownMicros = 0;
@@ -163,10 +158,6 @@ private:
     unsigned long _lastContinue = 0;
     unsigned long _lastContinueMicros = 0;
     unsigned long _continueCount = 0;
-
-    unsigned long _lastUp = 0;
-    unsigned long _lastUpMicros = 0;
-    unsigned long _upCount = 0;
 
     unsigned long _lastPress = 0;
     unsigned long _lastPressMicros = 0;
@@ -184,18 +175,12 @@ private:
     unsigned long _lastPressCancelledMicros = 0;
     unsigned long _pressCancelledCount = 0;
 
-    MMButtonState _buttonState;
-
-
-    ListenerType _listener;
-
     bool _shouldUpdate() const;
 
     void _update();
 
     void _emitEvent(MMButtonEvent event);
 
-    MMButtonState getRawState() const;
 };
 
 #endif
